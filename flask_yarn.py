@@ -1,10 +1,5 @@
 from pathlib import Path
-from flask import current_app, send_from_directory
-
-try:
-    from flask import _app_ctx_stack as stack
-except ImportError:
-    from flask import _request_ctx_stack as stack
+from flask import send_from_directory, abort
 
 
 class Yarn(object):
@@ -13,14 +8,24 @@ class Yarn(object):
         self.app = app
         self.setdefault(app)
         self.root = Path(app.config['YARN_DIR'])
+        self.static_root = Path(app.config['STATIC_DIR'])
         self.app.add_url_rule(
             '/{prefix}/<name>/<path:file>'.format(prefix=app.config['YARN_PREFIX']),
             view_func=self.serve_static)
 
-    def setdefault(self, app):
+    @staticmethod
+    def setdefault(app):
         app.config.setdefault('YARN_PREFIX', 'static')
+        app.config.setdefault('STATIC_DIR', 'static')
         app.config.setdefault('YARN_DIR', 'node_modules')
 
     def serve_static(self, name, file):
-        f = self.root.joinpath(name, 'dist', file)
-        return send_from_directory(f.parent, f.name)
+        for f in [self.root.joinpath(name, 'dist', file),
+                  self.root.joinpath(name, file),
+                  self.static_root.joinpath(name, file)]:
+            if f.exists():
+                return send_from_directory(f.parent, f.name)
+        return abort(404)
+
+    def url_for(self, name, file):
+        return self.root.joinpath(name, 'dist', file)
